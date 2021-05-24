@@ -1,5 +1,5 @@
 const sha256 = require('sha256');
-
+const currentNodeUrl = process.argv[3];
 
 function Blockchain (){
     let chain = [];
@@ -7,6 +7,8 @@ function Blockchain (){
     let timeNeeded = 20160;
     let old_diff = 5;
     let diff = old_diff * (20160 / timeNeeded );
+    this.currentNodeUrl = currentNodeUrl;
+    this.networkNodes = [];
     Object.defineProperty(this, 'diff', {
         get: function(){
             return diff;
@@ -61,6 +63,13 @@ function Blockchain (){
         const dataAsStaring = previousBlockHash + nonce.toString() + JSON.stringify(currentBlockData);
         const hash = sha256(dataAsStaring);
         return hash;
+    }
+    this.getBlockchain = function(){
+        return {
+            chain: chain,
+            newTransactions: newTransactions,
+            networkNodes: this.networkNodes
+        };
     }
 
     this.creatNewBlock(21,'0','0');
