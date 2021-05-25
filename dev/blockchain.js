@@ -1,11 +1,12 @@
 const sha256 = require('sha256');
 const currentNodeUrl = process.argv[3];
+const uuid = require('uuid/v1');
 
 function Blockchain (){
     let chain = [];
-    let newTransactions = [];
+    let pendingTransactions = [];
     let timeNeeded = 20160;
-    let old_diff = 5;
+    let old_diff = 4;
     let diff = old_diff * (20160 / timeNeeded );
     this.currentNodeUrl = currentNodeUrl;
     this.networkNodes = [];
@@ -18,35 +19,39 @@ function Blockchain (){
     Object.defineProperty(this, 'chain', {
         get: function(){
             return chain;
+        },
+        set: function(newChain){
+            chain = newChain;
         }
 
     });
-    Object.defineProperty(this, 'newTransactions', {
+    Object.defineProperty(this, 'pendingTransactions', {
         get: function(){
-            return newTransactions;
+            return pendingTransactions;
+        },
+        set : function(newPendingTransactions){
+            pendingTransactions = newPendingTransactions;
         }
        
     });
 
-    let pushNewTransaction = function(transaction){
-        newTransactions.push(transaction);
-    }
+    
     this.chainLength = function(){
         return chain.length;
     }
-    let pushNewBlock = function(block){
+    this.pushNewBlock = function(block){
         chain.push(block);
     }
 
-    let emptyNewTransactions = function(){
-        newTransactions = [];
+    this.emptyPendingTransactions = function(){
+        pendingTransactions = [];
     }
-    this.creatNewBlock = function(nounce, previousBlockHash, hash){
-        const newBlock = new Block(nounce, previousBlockHash, hash, this.newTransactions,
+    this.createNewBlock = function(nounce, previousBlockHash, hash){
+        const newBlock = new Block(nounce, previousBlockHash, hash, this.pendingTransactions,
              this.chainLength() + 1 , Date.now())
        
-       emptyNewTransactions();
-       pushNewBlock(newBlock); 
+       this.emptyPendingTransactions();
+       this.pushNewBlock(newBlock); 
     
         return newBlock;
     }
@@ -54,11 +59,15 @@ function Blockchain (){
     this.getLastBlock = function(){
         return chain[this.chainLength() - 1];
     }
-    this.creatNewTransaction = function(amount, sender, recipient){
+    this.createNewTransaction = function(amount, sender, recipient){
         const newTransaction = new Transaction(amount, sender, recipient);
-        pushNewTransaction(newTransaction); 
-        return this.getLastBlock()['index'] + 1;
+        return newTransaction;
+       
     } 
+    this.addTransactionToPendingTransactions = function(transactionObj){
+        pendingTransactions.push(transactionObj);
+        return this.getLastBlock()['index'] + 1;
+    }
     this.hashBlock = function(previousBlockHash, currentBlockData, nonce){
         const dataAsStaring = previousBlockHash + nonce.toString() + JSON.stringify(currentBlockData);
         const hash = sha256(dataAsStaring);
@@ -67,12 +76,13 @@ function Blockchain (){
     this.getBlockchain = function(){
         return {
             chain: chain,
-            newTransactions: newTransactions,
-            networkNodes: this.networkNodes
+            pendingTransactions: pendingTransactions,
+            networkNodes: this.networkNodes,
+            chainLength : chain.length
         };
     }
 
-    this.creatNewBlock(21,'0','0');
+    this.createNewBlock(21,'0','0');
 
 }
 
@@ -88,14 +98,37 @@ Blockchain.prototype.POW = function(previousBlockHash, currentBlockData){
         nonce++;
         hash = this.hashBlock(previousBlockHash, currentBlockData, nonce);
     }
-    return hash;
+    return nonce;
 }
 
-function Block(nounce, previousBlockHash, hash, newTransactions, index, timeStamp){
-    this.nounce = nounce;
+Blockchain.prototype.chainIsValid = function(blockchain) {
+	let validChain = true;
+
+	for (var i = 1; i < this.chainLength; i++) {
+		const currentBlock = this.chain[1];
+		const prevBlock = this.chain[i - 1];
+		const blockHash = this.hashBlock(prevBlock['hash'], { transactions: currentBlock['transactions'], index: currentBlock['index'] }, currentBlock['nonce']);
+		if (blockHash.substring(0, this.diff) !== '0'.repeat(this.diff)) validChain = false;
+		if (currentBlock['previousBlockHash'] !== prevBlock['hash']) validChain = false;
+	};
+
+	const genesisBlock = this.chain[0];
+	const correctNonce = genesisBlock['nonce'] === 21;
+	const correctPreviousBlockHash = genesisBlock['previousBlockHash'] === '0';
+	const correctHash = genesisBlock['hash'] === '0';
+	const correctTransactions = genesisBlock['transactions'].length === 0;
+
+	if (!correctNonce || !correctPreviousBlockHash || !correctHash || !correctTransactions) validChain = false;
+
+	return validChain;
+};
+
+
+function Block(nonce, previousBlockHash, hash, transactions, index, timeStamp){
+    this.nonce = nonce;
     this.previousBlockHash = previousBlockHash;
     this.hash = hash;
-    this.newTransactions = newTransactions;
+    this.transactions = transactions;
     this.index = index;
     this.timeStamp = timeStamp;
 
@@ -109,7 +142,8 @@ function Block(nounce, previousBlockHash, hash, newTransactions, index, timeStam
 function Transaction(amount, sender, recipient){
     this.amount =  amount,
     this.sender =  sender,
-    this.recipient = recipient
+    this.recipient = recipient,
+    this.transactionId = uuid().split('-').join('');
 
 }
 
